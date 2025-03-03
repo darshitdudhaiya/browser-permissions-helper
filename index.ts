@@ -11,13 +11,16 @@ export async function checkPermission(
       permissionName === ("microphone" as PermissionName)
     ) {
       try {
-        await navigator.mediaDevices.getUserMedia(
+        const stream = await navigator.mediaDevices.getUserMedia(
           permissionName === ("camera" as PermissionName)
             ? { video: true }
             : { audio: true }
         );
+
+        stream.getTracks().forEach((track) => track.stop());
         return "granted";
-      } catch {
+      } catch (error) {
+        console.error(`Error accessing ${permissionName}:`, error);
         return "denied";
       }
     }
@@ -59,29 +62,46 @@ export async function requestPermission(
       return false;
 
     case "camera" as PermissionName:
-      return navigator.mediaDevices
-        .getUserMedia({ video: true })
-        .then(() => true)
-        .catch((error) => {
-          if (error.name === "NotAllowedError") {
-            console.warn("Camera access was blocked. Enable it in settings.");
-          }
-          return false;
+      try {
+        // Get the stream
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
         });
+        // Stop all tracks to release the camera
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
+      } catch (error) {
+        if (error.name === "NotAllowedError") {
+          console.warn("Camera access was blocked. Enable it in settings.");
+        } else {
+          console.error("Camera error:", error.name, error.message);
+        }
+        return false;
+      }
 
     case "microphone" as PermissionName:
-      return navigator.mediaDevices
-        .getUserMedia({ audio: true })
-        .then(() => true)
-        .catch(() => false);
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
+      } catch (error) {
+        console.error("Microphone error:", error.name, error.message);
+        return false;
+      }
 
     case "camera-advanced" as PermissionName:
-      return navigator.mediaDevices
-        .getUserMedia({
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 1920, height: 1080, facingMode: "user" },
-        })
-        .then(() => true)
-        .catch(() => false);
+        });
+        stream.getTracks().forEach((track) => track.stop());
+        return true;
+      } catch (error) {
+        console.error("Advanced camera error:", error.name, error.message);
+        return false;
+      }
 
     case "speaker-selection" as PermissionName:
       if ("selectAudioOutput" in navigator.mediaDevices) {
