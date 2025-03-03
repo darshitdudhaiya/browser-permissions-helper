@@ -10,7 +10,6 @@ export async function checkPermission(
       permissionName === ("camera" as PermissionName) ||
       permissionName === ("microphone" as PermissionName)
     ) {
-      // Fallback for browsers that don't support permissions.query for camera/mic
       try {
         await navigator.mediaDevices.getUserMedia(
           permissionName === ("camera" as PermissionName)
@@ -26,7 +25,7 @@ export async function checkPermission(
     const permission = await navigator.permissions.query({
       name: permissionName,
     });
-    return permission.state; // "granted", "denied", or "prompt"
+    return permission.state;
   } catch (error) {
     console.error(`Error checking permission for ${permissionName}:`, error);
     return "denied";
@@ -63,7 +62,12 @@ export async function requestPermission(
       return navigator.mediaDevices
         .getUserMedia({ video: true })
         .then(() => true)
-        .catch(() => false);
+        .catch((error) => {
+          if (error.name === "NotAllowedError") {
+            console.warn("Camera access was blocked. Enable it in settings.");
+          }
+          return false;
+        });
 
     case "microphone" as PermissionName:
       return navigator.mediaDevices
