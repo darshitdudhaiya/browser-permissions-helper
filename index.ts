@@ -6,6 +6,23 @@ export async function checkPermission(
     return "denied";
   }
   try {
+    if (
+      permissionName === ("camera" as PermissionName) ||
+      permissionName === ("microphone" as PermissionName)
+    ) {
+      // Fallback for browsers that don't support permissions.query for camera/mic
+      try {
+        await navigator.mediaDevices.getUserMedia(
+          permissionName === ("camera" as PermissionName)
+            ? { video: true }
+            : { audio: true }
+        );
+        return "granted";
+      } catch {
+        return "denied";
+      }
+    }
+
     const permission = await navigator.permissions.query({
       name: permissionName,
     });
@@ -15,7 +32,6 @@ export async function checkPermission(
     return "denied";
   }
 }
-
 export async function requestPermission(
   permissionName: PermissionName
 ): Promise<boolean> {
@@ -44,9 +60,14 @@ export async function requestPermission(
       return false;
 
     case "camera" as PermissionName:
+      return navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then(() => true)
+        .catch(() => false);
+
     case "microphone" as PermissionName:
       return navigator.mediaDevices
-        .getUserMedia({ [permissionName]: true })
+        .getUserMedia({ audio: true })
         .then(() => true)
         .catch(() => false);
 
