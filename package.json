@@ -1,0 +1,26 @@
+{
+  "name": "browser-permissions-helper",
+  "version": "1.0.0",
+  "description": "A simple package to check and request browser permissions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "author": "Your Name",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/darshitdudhaiya/browser-permissions-helper.git"
+  },
+  "keywords": [
+    "browser",
+    "permissions",
+    "helper",
+    "typescript"
+  ],
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}

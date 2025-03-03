@@ -1,0 +1,1 @@
+# browser-permissions-helper
