@@ -39,6 +39,10 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: 🔑 Authenticate with GitHub
+        run: |
+          git remote set-url origin https://darshitdudhaiya:${{ secrets.GH_PAT }}@github.com/darshitdudhaiya/browser-permissions-helper.git
+
       - name: 🏷️ Create Git Tag
         run: |
           git config user.name "github-actions[bot]"
