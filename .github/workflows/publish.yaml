@@ -3,7 +3,7 @@ name: 🚀 Publish NPM Package
 on:
   push:
     branches:
-      - main 
+      - main
 
 jobs:
   publish:
@@ -42,7 +42,9 @@ jobs:
       - name: 🏷️ Create Git Tag
         run: |
           git tag ${{ env.new_version }}
-          git push origin ${{ env.new_version }}
+          git push https://darshitdudhaiya:${{ secrets.GH_PAT }}@github.com/darshitdudhaiya/browser-permissions-helper.git ${{ env.new_version }}
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
 
       - name: 📝 Create GitHub Release
         uses: softprops/action-gh-release@v2
