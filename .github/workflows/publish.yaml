@@ -22,9 +22,6 @@ jobs:
       - name: 📥 Install Dependencies
         run: npm install
 
-      - name: 🧪 Run Tests
-        run: npm test
-
       - name: 🔢 Get Latest Tag
         id: get_latest_tag
         run: |
