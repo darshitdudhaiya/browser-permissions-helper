@@ -1,4 +1,7 @@
-# 🌟 Browser Permissions Helper
+# Browser Permissions Helper
+
+![browser-permission-helper-banner.png](browser-permission-helper-banner.png)
+
 
 A simple utility to manage and request browser permissions seamlessly. This package provides an easy-to-use API for handling permissions like notifications, geolocation, camera, microphone, and more.
 
