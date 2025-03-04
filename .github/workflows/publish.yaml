@@ -1,0 +1,58 @@
+name: 🚀 Publish NPM Package
+
+on:
+  push:
+    branches:
+      - main 
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🛎️ Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: "https://registry.npmjs.org/"
+
+      - name: 📥 Install Dependencies
+        run: npm install
+
+      - name: 🧪 Run Tests
+        run: npm test
+
+      - name: 🔢 Get Latest Tag
+        id: get_latest_tag
+        run: |
+          echo "latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')" >> $GITHUB_ENV
+
+      - name: 🔼 Bump Version
+        id: versioning
+        run: |
+          NEW_VERSION=$(npm version patch --no-git-tag-version)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
+          echo "New Version: $NEW_VERSION"
+
+      - name: 🚀 Publish to NPM
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 🏷️ Create Git Tag
+        run: |
+          git tag ${{ env.new_version }}
+          git push origin ${{ env.new_version }}
+
+      - name: 📝 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.new_version }}
+          name: "Release ${{ env.new_version }}"
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
