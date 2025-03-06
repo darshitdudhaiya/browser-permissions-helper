@@ -48,7 +48,9 @@ export async function requestPermission(
 
     case "clipboard-write" as PermissionName:
       try {
+        const original = await navigator.clipboard.readText();
         await navigator.clipboard.writeText("test");
+        await navigator.clipboard.writeText(original); // Restore User's clipboard data back 
         return true;
       } catch {
         return false;
