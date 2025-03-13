@@ -1,4 +1,4 @@
-enum PermissionType {
+export enum PermissionType {
   Geolocation = "geolocation",
   ClipboardWrite = "clipboard-write",
   Notifications = "notifications",
@@ -87,9 +87,10 @@ export async function requestPermission(
     case PermissionType.CameraAdvanced:
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: permissionName === PermissionType.CameraAdvanced
-            ? { width: 1920, height: 1080, facingMode: "user" }
-            : { video: true },
+          video:
+            permissionName === PermissionType.CameraAdvanced
+              ? { width: 1920, height: 1080, facingMode: "user" }
+              : true,
         });
         stream.getTracks().forEach((track) => track.stop());
         return true;

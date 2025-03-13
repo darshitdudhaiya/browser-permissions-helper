@@ -29,38 +29,49 @@ yarn add browser-permissions-helper
 ### Import the Module
 
 ```javascript
-import { checkPermission, requestPermission } from 'browser-permissions-helper';
+import { PermissionType, checkPermission, requestPermission } from 'browser-permissions-helper';
 ```
 
 ### Check Permission Status
 
 ```javascript
-const status = await checkPermission('geolocation');
+const status = await checkPermission(PermissionType.Geolocation);
 console.log(`Geolocation permission: ${status}`);
 ```
 
 ### Request Permission
 
 ```javascript
-const result = await requestPermission('notifications');
+const result = await requestPermission(PermissionType.Notifications);
 console.log(`Notification permission granted: ${result}`);
 ```
 
 ## 📜 Supported Permissions
 
 - `geolocation`
+- `clipboard-write`
 - `notifications`
 - `camera`
 - `microphone`
-- `clipboard-read`
-- `clipboard-write`
+- `camera-advanced`
+- `speaker-selection`
+- `bluetooth`
+- `midi`
+- `nfc`
+- `screen-wake-lock`
+- `persistent-storage`
+- `push`
+- `idle-detection`
+- `storage-access`
+- `display-capture`
+- `window-management`
 
 ## 📖 API Reference
 
-### `checkPermission(permissionType: string) => Promise<'granted' | 'denied' | 'prompt'>`
+### `checkPermission(permissionType: PermissionType) => Promise<'granted' | 'denied' | 'prompt'>`
 Checks the current status of a given permission.
 
-### `requestPermission(permissionType: string) => Promise<boolean>`
+### `requestPermission(permissionType: PermissionType) => Promise<boolean>`
 Requests the specified permission from the user and returns `true` if granted, otherwise `false`.
 
 ## 🛡️ Browser Compatibility
