@@ -1,5 +1,25 @@
+enum PermissionType {
+  Geolocation = "geolocation",
+  ClipboardWrite = "clipboard-write",
+  Notifications = "notifications",
+  Camera = "camera",
+  Microphone = "microphone",
+  CameraAdvanced = "camera-advanced",
+  SpeakerSelection = "speaker-selection",
+  Bluetooth = "bluetooth",
+  Midi = "midi",
+  NFC = "nfc",
+  ScreenWakeLock = "screen-wake-lock",
+  PersistentStorage = "persistent-storage",
+  Push = "push",
+  IdleDetection = "idle-detection",
+  StorageAccess = "storage-access",
+  DisplayCapture = "display-capture",
+  WindowManagement = "window-management",
+}
+
 export async function checkPermission(
-  permissionName: PermissionName
+  permissionName: PermissionType
 ): Promise<PermissionState> {
   if (!navigator.permissions) {
     console.warn("Permissions API is not supported in this browser.");
@@ -7,16 +27,15 @@ export async function checkPermission(
   }
   try {
     if (
-      permissionName === ("camera" as PermissionName) ||
-      permissionName === ("microphone" as PermissionName)
+      permissionName === PermissionType.Camera ||
+      permissionName === PermissionType.Microphone
     ) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia(
-          permissionName === ("camera" as PermissionName)
+          permissionName === PermissionType.Camera
             ? { video: true }
             : { audio: true }
         );
-
         stream.getTracks().forEach((track) => track.stop());
         return "granted";
       } catch (error) {
@@ -26,7 +45,7 @@ export async function checkPermission(
     }
 
     const permission = await navigator.permissions.query({
-      name: permissionName,
+      name: permissionName as PermissionName,
     });
     return permission.state;
   } catch (error) {
@@ -34,11 +53,12 @@ export async function checkPermission(
     return "denied";
   }
 }
+
 export async function requestPermission(
-  permissionName: PermissionName
+  permissionName: PermissionType
 ): Promise<boolean> {
   switch (permissionName) {
-    case "geolocation":
+    case PermissionType.Geolocation:
       return new Promise((resolve) => {
         navigator.geolocation.getCurrentPosition(
           () => resolve(true),
@@ -46,64 +66,49 @@ export async function requestPermission(
         );
       });
 
-    case "clipboard-write" as PermissionName:
+    case PermissionType.ClipboardWrite:
       try {
-        await navigator.clipboard.writeText("test");
-        return true;
+        const permission = await navigator.permissions.query({
+          name: "clipboard-write" as PermissionName,
+        });
+        return permission.state === "granted";
       } catch {
         return false;
       }
 
-    case "notifications":
+    case PermissionType.Notifications:
       if ("Notification" in window) {
         const permission = await Notification.requestPermission();
         return permission === "granted";
       }
       return false;
 
-    case "camera" as PermissionName:
+    case PermissionType.Camera:
+    case PermissionType.CameraAdvanced:
       try {
-        // Get the stream
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: permissionName === PermissionType.CameraAdvanced
+            ? { width: 1920, height: 1080, facingMode: "user" }
+            : { video: true },
         });
-        // Stop all tracks to release the camera
         stream.getTracks().forEach((track) => track.stop());
         return true;
-      } catch (error) {
-        if (error.name === "NotAllowedError") {
-          console.warn("Camera access was blocked. Enable it in settings.");
-        } else {
-          console.error("Camera error:", error.name, error.message);
-        }
+      } catch {
         return false;
       }
 
-    case "microphone" as PermissionName:
+    case PermissionType.Microphone:
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         });
         stream.getTracks().forEach((track) => track.stop());
         return true;
-      } catch (error) {
-        console.error("Microphone error:", error.name, error.message);
+      } catch {
         return false;
       }
 
-    case "camera-advanced" as PermissionName:
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1920, height: 1080, facingMode: "user" },
-        });
-        stream.getTracks().forEach((track) => track.stop());
-        return true;
-      } catch (error) {
-        console.error("Advanced camera error:", error.name, error.message);
-        return false;
-      }
-
-    case "speaker-selection" as PermissionName:
+    case PermissionType.SpeakerSelection:
       if ("selectAudioOutput" in navigator.mediaDevices) {
         try {
           await (navigator.mediaDevices as any).selectAudioOutput();
@@ -114,7 +119,7 @@ export async function requestPermission(
       }
       return false;
 
-    case "bluetooth" as PermissionName:
+    case PermissionType.Bluetooth:
       if ("bluetooth" in navigator) {
         try {
           await (navigator as any).bluetooth.requestDevice({
@@ -127,7 +132,7 @@ export async function requestPermission(
       }
       return false;
 
-    case "midi" as PermissionName:
+    case PermissionType.Midi:
       if (navigator.requestMIDIAccess) {
         try {
           await navigator.requestMIDIAccess();
@@ -138,7 +143,7 @@ export async function requestPermission(
       }
       return false;
 
-    case "nfc" as PermissionName:
+    case PermissionType.NFC:
       if ("NDEFReader" in window) {
         try {
           const nfc = new (window as any).NDEFReader();
@@ -150,7 +155,7 @@ export async function requestPermission(
       }
       return false;
 
-    case "screen-wake-lock":
+    case PermissionType.ScreenWakeLock:
       if ("wakeLock" in navigator) {
         try {
           await navigator.wakeLock.request("screen");
@@ -161,13 +166,13 @@ export async function requestPermission(
       }
       return false;
 
-    case "persistent-storage":
+    case PermissionType.PersistentStorage:
       if (navigator.storage && navigator.storage.persist) {
         return navigator.storage.persist();
       }
       return false;
 
-    case "push":
+    case PermissionType.Push:
       if ("Notification" in window && "serviceWorker" in navigator) {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") return false;
@@ -185,7 +190,7 @@ export async function requestPermission(
       }
       return false;
 
-    case "idle-detection" as PermissionName:
+    case PermissionType.IdleDetection:
       if ("IdleDetector" in window) {
         try {
           const permission = await (
@@ -198,7 +203,7 @@ export async function requestPermission(
       }
       return false;
 
-    case "storage-access" as PermissionName:
+    case PermissionType.StorageAccess:
       if ("requestStorageAccess" in document) {
         try {
           await (document as any).requestStorageAccess();
@@ -209,7 +214,7 @@ export async function requestPermission(
       }
       return false;
 
-    case "display-capture" as PermissionName:
+    case PermissionType.DisplayCapture:
       try {
         await navigator.mediaDevices.getDisplayMedia({ video: true });
         return true;
@@ -217,7 +222,7 @@ export async function requestPermission(
         return false;
       }
 
-    case "window-management" as PermissionName:
+    case PermissionType.WindowManagement:
       if ("getScreenDetails" in window) {
         try {
           await (window as any).getScreenDetails();
