@@ -1,0 +1,20 @@
+export enum PermissionType {
+    Geolocation = "geolocation",
+    ClipboardWrite = "clipboard-write",
+    Notifications = "notifications",
+    Camera = "camera",
+    Microphone = "microphone",
+    CameraAdvanced = "camera-advanced",
+    SpeakerSelection = "speaker-selection",
+    Bluetooth = "bluetooth",
+    Midi = "midi",
+    NFC = "nfc",
+    ScreenWakeLock = "screen-wake-lock",
+    PersistentStorage = "persistent-storage",
+    Push = "push",
+    IdleDetection = "idle-detection",
+    StorageAccess = "storage-access",
+    DisplayCapture = "display-capture",
+    WindowManagement = "window-management",
+  }
+  

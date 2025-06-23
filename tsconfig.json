@@ -1,9 +1,14 @@
 {
   "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "lib": ["DOM", "ES2020"],
+    "declaration": true,
     "outDir": "dist",
-    "module": "CommonJS",
-    "target": "ES6",
-    "declaration": true
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true
   },
-  "include": ["index.ts"]
+  "include": ["src"]
 }
