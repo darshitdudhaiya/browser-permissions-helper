@@ -29,7 +29,12 @@ yarn add browser-permissions-helper
 ### Import the Module
 
 ```javascript
-import { PermissionType, checkPermission, requestPermission } from 'browser-permissions-helper';
+import {
+  PermissionType,
+  checkPermission,
+  requestPermission,
+  getPermissionSupportInfo
+} from 'browser-permissions-helper';
 ```
 
 ### Check Permission Status
@@ -45,6 +50,15 @@ console.log(`Geolocation permission: ${status}`);
 const result = await requestPermission(PermissionType.Notifications);
 console.log(`Notification permission granted: ${result}`);
 ```
+
+### Get Browser Support Info for a Permission
+
+```javascript
+const info = getPermissionSupportInfo(PermissionType.Bluetooth);
+console.log(info.supportedBrowsers); // ['Chrome', 'Edge']
+console.log(info.notes); // 'Not supported in Firefox or Safari'
+```
+
 
 ## 📜 Supported Permissions
 
@@ -74,6 +88,9 @@ Checks the current status of a given permission.
 ### `requestPermission(permissionType: PermissionType) => Promise<boolean>`
 Requests the specified permission from the user and returns `true` if granted, otherwise `false`.
 
+### `getPermissionSupportInfo(permissionType: PermissionType) => { supportedBrowsers: string[]; notes?: string; }`
+Returns a list of browsers that support the given permission, with optional notes for caveats or limited support.
+
 ## 🛡️ Browser Compatibility
 This package works in modern browsers that support the **Permissions API**.
 
@@ -83,6 +100,9 @@ This package works in modern browsers that support the **Permissions API**.
 | Firefox  | ✅ Yes   |
 | Edge     | ✅ Yes   |
 | Safari   | ✅ Partial (Some permissions may not be available) |
+
+> 💡 Use `getPermissionSupportInfo()` to programmatically check support for a specific permission.
+
 
 ## 🤝 Contributing
 Contributions are welcome! Feel free to fork the repository, create a feature branch, and submit a PR.
