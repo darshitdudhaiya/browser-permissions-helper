@@ -51,7 +51,7 @@ const result = await requestPermission(PermissionType.Notifications);
 console.log(`Notification permission granted: ${result}`);
 ```
 
-### Get Browser Support Info for a Permission
+### Get Browser Support Info for permission
 
 ```javascript
 const info = getPermissionSupportInfo(PermissionType.Bluetooth);
@@ -101,7 +101,7 @@ This package works in modern browsers that support the **Permissions API**.
 | Edge     | ✅ Yes   |
 | Safari   | ✅ Partial (Some permissions may not be available) |
 
-> 💡 Use `getPermissionSupportInfo()` to programmatically check support for a specific permission.
+> 💡 Use `getPermissionSupportInfo()` to programmatically check support for specific permission.
 
 
 ## 🤝 Contributing

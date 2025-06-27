@@ -1,11 +1,13 @@
 import { PermissionType } from "../enums/permission-type.enum";
-import { PermissionSupportMap } from "../data/permission-support-map";
+import { PermissionSupportInfo, PermissionSupportMap } from "../data/permission-support-map";
 
-export function getPermissionSupportInfo(permission: PermissionType) {
-  return (
-    PermissionSupportMap[permission] ?? {
-      supportedBrowsers: [],
-      notes: "No compatibility info available.",
-    }
-  );
+const DEFAULT_SUPPORT_INFO: PermissionSupportInfo = {
+  supportedBrowsers: [],
+  notes: "No compatibility info available.",
+} as const;
+
+export function getPermissionSupportInfo(
+  permission: PermissionType
+): PermissionSupportInfo {
+  return PermissionSupportMap[permission] ?? DEFAULT_SUPPORT_INFO;
 }
