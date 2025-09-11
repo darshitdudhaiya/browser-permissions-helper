@@ -12,6 +12,12 @@ A simple utility to manage and request browser permissions seamlessly. This pack
 - 📢 Handle permission changes efficiently.
 - 🎯 Lightweight and easy to integrate.
 
+## ✨ Preview
+
+When you request a permission, a modern, customizable modal will appear to the user.
+
+![Permission Request Modal Preview](https://i.imgur.com/6nK6pWp.png)
+
 ## 📦 Installation
 
 ```sh
@@ -85,8 +91,41 @@ console.log(info.notes); // 'Not supported in Firefox or Safari'
 ### `checkPermission(permissionType: PermissionType) => Promise<'granted' | 'denied' | 'prompt'>`
 Checks the current status of a given permission.
 
-### `requestPermission(permissionType: PermissionType) => Promise<boolean>`
+### `requestPermission(permissionType: PermissionType, styleOptions?: ModalStyleOptions) => Promise<boolean>`
 Requests the specified permission from the user and returns `true` if granted, otherwise `false`.
+
+This function displays a customizable modal to the user before the native browser permission prompt appears.
+
+**Styling the Modal**
+
+You can customize the appearance of the modal by passing a `styleOptions` object. All properties are optional.
+
+```javascript
+const styleOptions = {
+  modalBackgroundColor: '#333',
+  modalTextColor: '#fff',
+  modalBorderRadius: '15px',
+  buttonAllowBackgroundColor: '#007bff',
+  buttonAllowTextColor: '#fff',
+  buttonRejectBackgroundColor: '#6c757d',
+  buttonRejectTextColor: '#fff',
+  buttonBorderRadius: '8px',
+};
+
+const result = await requestPermission(PermissionType.Notifications, styleOptions);
+console.log(`Notification permission granted: ${result}`);
+```
+
+The `ModalStyleOptions` interface has the following properties:
+
+- `modalBackgroundColor?: string`
+- `modalTextColor?: string`
+- `modalBorderRadius?: string`
+- `buttonAllowBackgroundColor?: string`
+- `buttonAllowTextColor?: string`
+- `buttonRejectBackgroundColor?: string`
+- `buttonRejectTextColor?: string`
+- `buttonBorderRadius?: string`
 
 ### `getPermissionSupportInfo(permissionType: PermissionType) => { supportedBrowsers: string[]; notes?: string; }`
 Returns a list of browsers that support the given permission, with optional notes for caveats or limited support.
