@@ -108,7 +108,8 @@ export async function requestPermission(
       case PermissionType.ScreenWakeLock:
         if ("wakeLock" in navigator) {
           try {
-            await navigator.wakeLock.request("screen");
+            const sentinel = await navigator.wakeLock.request("screen");
+            try { await sentinel.release(); } catch { }
             return true;
           } catch {
             return false;

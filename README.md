@@ -94,9 +94,9 @@ Checks the current status of a given permission.
 ### `requestPermission(permissionType: PermissionType, styleOptions?: ModalStyleOptions) => Promise<boolean>`
 Requests the specified permission from the user and returns `true` if granted, otherwise `false`.
 
-This function displays a customizable modal to the user before the native browser permission prompt appears.
+This function displays a customizable modal to the user before the native browser permission prompt appears. The Reject button includes a 15‑second countdown; when it reaches zero, the request resolves to `false`.
 
-**Styling the Modal**
+#### Styling the Modal
 
 You can customize the appearance of the modal by passing a `styleOptions` object. All properties are optional.
 
