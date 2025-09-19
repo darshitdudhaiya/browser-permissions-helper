@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: 🛎️ Checkout Repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT }} # required for pushing back changes
 
       - name: 📦 Set up Node.js
         uses: actions/setup-node@v4
@@ -22,11 +24,6 @@ jobs:
       - name: 📥 Install Dependencies
         run: npm install
 
-      - name: 🔢 Get Latest Tag
-        id: get_latest_tag
-        run: |
-          echo "latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')" >> $GITHUB_ENV
-
       - name: 🔼 Bump Version
         id: versioning
         run: |
@@ -34,23 +31,23 @@ jobs:
           echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
           echo "New Version: $NEW_VERSION"
 
+      - name: 💾 Commit Version Bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "🔖 Bump version to ${{ env.new_version }}"
+          git push origin main
+
       - name: 🚀 Publish to NPM
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: 🔑 Authenticate with GitHub
-        run: |
-          git remote set-url origin https://darshitdudhaiya:${{ secrets.GH_PAT }}@github.com/darshitdudhaiya/browser-permissions-helper.git
-
       - name: 🏷️ Create Git Tag
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag ${{ env.new_version }}
-          git push https://darshitdudhaiya:${{ secrets.GH_PAT }}@github.com/darshitdudhaiya/browser-permissions-helper.git ${{ env.new_version }}
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
+          git push origin ${{ env.new_version }}
 
       - name: 📝 Create GitHub Release
         uses: softprops/action-gh-release@v2
