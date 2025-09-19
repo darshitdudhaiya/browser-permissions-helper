@@ -16,7 +16,7 @@ A simple utility to manage and request browser permissions seamlessly. This pack
 
 When you request a permission, a modern, customizable modal will appear to the user.
 
-![Permission Request Modal Preview](https://i.imgur.com/6nK6pWp.png)
+![Permission Request Modal Preview](https://drive.google.com/uc?export=view&id=1Nd89Gf3dZF1lUg4yqPcHAQitJQVlHnIL)
 
 ## 📦 Installation
 
