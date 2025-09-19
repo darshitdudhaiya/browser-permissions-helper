@@ -1,6 +1,6 @@
 {
   "name": "browser-permissions-helper",
-  "version": "4.2.9",
+  "version": "4.2.10",
   "description": "A simple package to check and request browser permissions",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
