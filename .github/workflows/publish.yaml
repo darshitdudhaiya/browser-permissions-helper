@@ -1,12 +1,43 @@
 name: 🚀 Publish NPM Package
 
+# Version bump is chosen at release time (default: patch).
+#
+# How to choose bump type (first match wins, highest priority first):
+#   1. Manual run: Actions → "Publish NPM Package" → Run workflow → pick bump
+#   2. Commit / merge message markers: [major] | [minor] | [patch]
+#      (also: release:major, release:minor, release:patch, #major, #minor, #patch)
+#   3. PR labels on the merged PR: release:major | release:minor | release:patch
+#      (aliases: major | minor | patch)
+#   4. Default → patch
+#
+# Examples:
+#   - Feature PR: add label `release:minor`, then merge
+#   - Hotfix: merge as usual (patch) or label `release:patch`
+#   - Breaking change: label `release:major` or put [major] in the merge commit message
+
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semver bump type for this release"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: read
 
 jobs:
   publish:
+    # Skip the bot's own version-bump commit (also uses [skip ci] in message)
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
@@ -14,7 +45,8 @@ jobs:
       - name: 🛎️ Checkout Repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_PAT }} # required for pushing back changes
+          token: ${{ secrets.GH_PAT }} # required for pushing version bump back to main
+          fetch-depth: 0
 
       - name: 📦 Set up Node.js
         uses: actions/setup-node@v4
@@ -25,21 +57,108 @@ jobs:
       - name: 📥 Install Dependencies
         run: npm install
 
+      - name: 🔎 Resolve bump type
+        id: bump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          resolve_from_text() {
+            local text="$1"
+            if echo "$text" | grep -qiE '\[major\]|release:[[:space:]]*major|#major|BREAKING CHANGE|breaking change'; then
+              echo "major"
+              return
+            fi
+            if echo "$text" | grep -qiE '\[minor\]|release:[[:space:]]*minor|#minor'; then
+              echo "minor"
+              return
+            fi
+            if echo "$text" | grep -qiE '\[patch\]|release:[[:space:]]*patch|#patch'; then
+              echo "patch"
+              return
+            fi
+            echo ""
+          }
+
+          BUMP=""
+
+          # 1) Manual workflow_dispatch input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BUMP="${{ github.event.inputs.bump }}"
+            echo "Bump from workflow_dispatch input: $BUMP"
+          fi
+
+          # 2) Commit / merge message markers on the pushed commit
+          if [ -z "$BUMP" ]; then
+            MSG="$(git log -1 --pretty=%B)"
+            echo "Head commit message:"
+            echo "$MSG"
+            BUMP="$(resolve_from_text "$MSG")"
+            if [ -n "$BUMP" ]; then
+              echo "Bump from commit message: $BUMP"
+            fi
+          fi
+
+          # 3) Labels on PR(s) associated with this commit
+          if [ -z "$BUMP" ]; then
+            SHA="${{ github.sha }}"
+            # commits/{sha}/pulls requires Accept header for the preview/media type historically;
+            # gh handles this. May return empty for direct pushes to main.
+            LABELS="$(gh api "repos/${{ github.repository }}/commits/${SHA}/pulls" \
+              --jq '.[].labels[].name' 2>/dev/null || true)"
+            echo "Associated PR labels:"
+            echo "${LABELS:-<none>}"
+
+            # Prefer highest semver impact if multiple release labels exist
+            if echo "$LABELS" | grep -qiE '^(release:major|major)$'; then
+              BUMP="major"
+            elif echo "$LABELS" | grep -qiE '^(release:minor|minor)$'; then
+              BUMP="minor"
+            elif echo "$LABELS" | grep -qiE '^(release:patch|patch)$'; then
+              BUMP="patch"
+            fi
+
+            if [ -n "$BUMP" ]; then
+              echo "Bump from PR label: $BUMP"
+            fi
+          fi
+
+          # 4) Default
+          if [ -z "$BUMP" ]; then
+            BUMP="patch"
+            echo "Bump defaulted to: patch"
+          fi
+
+          case "$BUMP" in
+            patch|minor|major) ;;
+            *)
+              echo "Invalid bump type '$BUMP'; falling back to patch"
+              BUMP="patch"
+              ;;
+          esac
+
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "Resolved bump type: $BUMP"
+
       - name: 🔼 Bump Version
         id: versioning
         run: |
-          NEW_VERSION=$(npm version patch --no-git-tag-version)
-          echo "new_version=$NEW_VERSION" >> $GITHUB_ENV
-          echo "New Version: $NEW_VERSION"
+          set -euo pipefail
+          BUMP="${{ steps.bump.outputs.bump }}"
+          NEW_VERSION="$(npm version "$BUMP" --no-git-tag-version)"
+          echo "new_version=$NEW_VERSION" >> "$GITHUB_ENV"
+          echo "bump_type=$BUMP" >> "$GITHUB_ENV"
+          echo "Bumped ($BUMP) → $NEW_VERSION"
 
       - name: 💾 Commit Version Bump
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
-          git commit -m "🔖 Bump version to ${{ env.new_version }} [skip ci]"
+          git commit -m "🔖 Bump version to ${{ env.new_version }} (${{ env.bump_type }}) [skip ci]"
           git push origin main
-
 
       - name: 🚀 Publish to NPM
         run: npm publish
@@ -48,14 +167,20 @@ jobs:
 
       - name: 🏷️ Create Git Tag
         run: |
-          git tag ${{ env.new_version }}
-          git push origin ${{ env.new_version }}
+          set -euo pipefail
+          git tag "${{ env.new_version }}"
+          git push origin "${{ env.new_version }}"
 
       - name: 📝 Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.new_version }}
           name: "Release ${{ env.new_version }}"
+          body: |
+            Automated release from `main`.
+
+            - **Version:** ${{ env.new_version }}
+            - **Bump type:** ${{ env.bump_type }}
           draft: false
           prerelease: false
         env:
