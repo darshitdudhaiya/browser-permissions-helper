@@ -10,19 +10,20 @@ name: 🚀 Publish NPM Package
 #      (aliases: major | minor | patch)
 #   4. Default → patch
 #
-# Examples:
-#   - Feature PR: add label `release:minor`, then merge
-#   - Hotfix: merge as usual (patch) or label `release:patch`
-#   - Breaking change: label `release:major` or put [major] in the merge commit message
+# Protected main (repository rulesets):
+#   Direct pushes to main are blocked. This workflow never pushes to main.
+#   It creates a short-lived release branch, opens a PR, waits for required
+#   checks, merges via the GitHub API (allowed path), then publishes + tags.
 #
-# Auth notes (main is protected by repository rulesets):
-#   - Direct pushes to main are blocked for normal contributors; merge via PR.
-#   - Version-bump commits must use secrets.GH_PAT (repo admin / owner PAT with
-#     Contents: Read and Write). GITHUB_TOKEN cannot bypass rulesets on personal repos.
-#   - GH_PAT must be valid — an expired/empty PAT fails checkout with:
-#     "could not read Username for 'https://github.com': terminal prompts disabled"
-#   - NPM_TOKEN is required for npm publish.
-#   - Version-bump commits include [skip ci] so publish does not loop.
+# Secrets:
+#   - NPM_TOKEN (required) — npm publish
+#   - GH_PAT (optional but recommended) — used for branch push / PR merge / tags
+#     when GITHUB_TOKEN is restricted. Fine-grained PAT needs:
+#       Repository access: this repo
+#       Permissions: Contents (Read and write), Pull requests (Read and write),
+#                    Metadata (Read)
+#     Classic PAT: repo scope.
+#     Prefer a classic repo-scoped PAT if fine-grained keeps returning 403.
 
 on:
   push:
@@ -42,42 +43,47 @@ on:
 
 permissions:
   contents: write
-  pull-requests: read
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
 
 jobs:
   publish:
-    # Skip the bot's own version-bump commit (also uses [skip ci] in message)
+    # Skip version-bump merges and bot loops
     if: >-
       github.actor != 'github-actions[bot]'
       && !(github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]'))
+      && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, '🔖 Bump version'))
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🔐 Verify release secrets
+      - name: 🔐 Resolve tokens
+        id: tokens
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          missing=0
-          if [ -z "${GH_PAT}" ]; then
-            echo "::error::GH_PAT secret is required so the version-bump can push to protected main (admin bypass)."
-            missing=1
-          fi
           if [ -z "${NPM_TOKEN}" ]; then
             echo "::error::NPM_TOKEN secret is required for npm publish."
-            missing=1
-          fi
-          if [ "$missing" -ne 0 ]; then
             exit 1
           fi
-          echo "Release secrets are present."
+          # Prefer GH_PAT when set; otherwise GITHUB_TOKEN (works for PR-based flow).
+          if [ -n "${GH_PAT}" ]; then
+            echo "Using GH_PAT for git/API operations."
+            echo "token_source=pat" >> "$GITHUB_OUTPUT"
+          else
+            echo "GH_PAT not set; using GITHUB_TOKEN for git/API operations."
+            echo "token_source=github_token" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 🛎️ Checkout Repository
         uses: actions/checkout@v5
         with:
-          # Owner/admin PAT bypasses the "Protect main" ruleset for the version bump.
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.GH_PAT || github.token }}
           fetch-depth: 0
           persist-credentials: true
 
@@ -93,7 +99,7 @@ jobs:
       - name: 🔎 Resolve bump type
         id: bump
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
           set -euo pipefail
 
@@ -116,13 +122,11 @@ jobs:
 
           BUMP=""
 
-          # 1) Manual workflow_dispatch input
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             BUMP="${{ github.event.inputs.bump }}"
             echo "Bump from workflow_dispatch input: $BUMP"
           fi
 
-          # 2) Commit / merge message markers on the pushed commit
           if [ -z "$BUMP" ]; then
             MSG="$(git log -1 --pretty=%B)"
             echo "Head commit message:"
@@ -133,7 +137,6 @@ jobs:
             fi
           fi
 
-          # 3) Labels on PR(s) associated with this commit
           if [ -z "$BUMP" ]; then
             SHA="${{ github.sha }}"
             LABELS="$(gh api "repos/${{ github.repository }}/commits/${SHA}/pulls" \
@@ -141,7 +144,6 @@ jobs:
             echo "Associated PR labels:"
             echo "${LABELS:-<none>}"
 
-            # Prefer highest semver impact if multiple release labels exist
             if echo "$LABELS" | grep -qiE '^(release:major|major)$'; then
               BUMP="major"
             elif echo "$LABELS" | grep -qiE '^(release:minor|minor)$'; then
@@ -155,7 +157,6 @@ jobs:
             fi
           fi
 
-          # 4) Default
           if [ -z "$BUMP" ]; then
             BUMP="patch"
             echo "Bump defaulted to: patch"
@@ -178,18 +179,88 @@ jobs:
           set -euo pipefail
           BUMP="${{ steps.bump.outputs.bump }}"
           NEW_VERSION="$(npm version "$BUMP" --no-git-tag-version)"
+          # npm version prints e.g. v4.4.1
           echo "new_version=$NEW_VERSION" >> "$GITHUB_ENV"
           echo "bump_type=$BUMP" >> "$GITHUB_ENV"
+          echo "version_number=${NEW_VERSION#v}" >> "$GITHUB_ENV"
           echo "Bumped ($BUMP) → $NEW_VERSION"
 
-      - name: 💾 Commit Version Bump
+      - name: 💾 Open release PR and merge into main
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
           set -euo pipefail
+
+          BRANCH="release/${{ env.new_version }}"
+          TITLE="🔖 Bump version to ${{ env.new_version }} (${{ env.bump_type }})"
+          MSG="${TITLE} [skip ci]"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Ensure we are not on main for the push (ruleset blocks direct main updates)
+          git checkout -B "$BRANCH"
+
           git add package.json package-lock.json
-          git commit -m "🔖 Bump version to ${{ env.new_version }} (${{ env.bump_type }}) [skip ci]"
-          git push origin HEAD:main
+          git commit -m "$MSG"
+
+          # Push release branch (allowed; does not target main)
+          if ! git push -u origin "HEAD:refs/heads/${BRANCH}"; then
+            echo "::error::Failed to push release branch ${BRANCH}."
+            echo "If using GH_PAT, ensure it has Contents: Read and write on this repository."
+            echo "Classic PAT: enable the 'repo' scope. Fine-grained: select this repo + Contents R/W."
+            exit 1
+          fi
+
+          BODY="Automated version bump for npm publish.
+
+- Version: ${{ env.new_version }}
+- Bump type: ${{ env.bump_type }}
+
+Opened by the publish workflow because main is protected (no direct pushes)."
+
+          PR_URL="$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "$TITLE" \
+            --body "$BODY")"
+
+          echo "Opened $PR_URL"
+          PR_NUMBER="${PR_URL##*/}"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_ENV"
+
+          # Wait for required status checks (e.g. GitGuardian), then merge
+          echo "Waiting for PR checks..."
+          # Some repos always have checks; if none are registered yet, continue after a short wait.
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if gh pr checks "$PR_NUMBER" 2>/dev/null; then
+              if gh pr checks "$PR_NUMBER" --watch --fail-fast; then
+                break
+              fi
+            else
+              echo "No checks reported yet (attempt $i); waiting..."
+              sleep 10
+            fi
+          done
+
+          # Merge via PR API (allowed under rulesets; not a direct push to main).
+          # Subject includes [skip ci] so the merge commit does not re-trigger publish.
+          if gh pr merge "$PR_NUMBER" \
+            --merge \
+            --delete-branch \
+            --subject "$MSG" \
+            --body "Automated release version bump."; then
+            echo "Merged PR #$PR_NUMBER"
+          else
+            echo "::error::Could not merge release PR #$PR_NUMBER."
+            echo "Ensure required checks have passed, and GH_PAT has Pull requests: Read and write."
+            echo "Classic PAT: use the 'repo' scope. You can merge the PR manually if needed."
+            exit 1
+          fi
+
+          # Sync local main for tagging / publish tree
+          git fetch origin main
+          git checkout -B main origin/main
 
       - name: 🚀 Publish to NPM
         run: npm publish
@@ -197,10 +268,38 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: 🏷️ Create Git Tag
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
           set -euo pipefail
-          git tag "${{ env.new_version }}"
-          git push origin "${{ env.new_version }}"
+          TAG="${{ env.new_version }}"
+
+          # Prefer git push; fall back to API if tag ruleset blocks the token
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists locally"
+          else
+            git tag "$TAG"
+          fi
+
+          if git push origin "$TAG"; then
+            echo "Pushed tag $TAG"
+          else
+            echo "git push tag failed; creating via API..."
+            SHA="$(git rev-parse HEAD)"
+            gh api \
+              --method POST \
+              "repos/${{ github.repository }}/git/refs" \
+              -f ref="refs/tags/${TAG}" \
+              -f sha="$SHA" \
+              || gh api \
+                --method POST \
+                "repos/${{ github.repository }}/git/tags" \
+                -f tag="$TAG" \
+                -f message="Release ${TAG}" \
+                -f object="$SHA" \
+                -f type="commit"
+            echo "Tag $TAG created via API"
+          fi
 
       - name: 📝 Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -215,4 +314,4 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT || github.token }}

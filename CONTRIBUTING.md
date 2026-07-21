@@ -61,8 +61,8 @@ You do **not** need to edit `package.json` version by hand. Merging into `main` 
 
 | Secret | Purpose |
 |--------|---------|
-| `GH_PAT` | Fine-grained (or classic) PAT of a **repo admin**, Contents read/write — pushes the version-bump commit past rulesets |
-| `NPM_TOKEN` | npm automation/granular token with publish access |
+| `NPM_TOKEN` | **Required.** npm automation/granular token with publish access |
+| `GH_PAT` | **Recommended.** Classic PAT with `repo` scope (or fine-grained: Contents R/W + Pull requests R/W on this repo). Used for release branch / PR / tags. Direct pushes to `main` are blocked by rulesets — the workflow opens a short-lived release PR instead. |
 
 Choose the bump type (default is **patch**):
 
