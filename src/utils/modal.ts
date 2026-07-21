@@ -151,9 +151,19 @@ export function showInfoModal(
     okButton.type = "button";
 
     let settled = false;
+
+    // Escape key support — listener is always detached in cleanup()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        cleanup();
+        resolve();
+      }
+    };
+
     const cleanup = () => {
       if (settled) return;
       settled = true;
+      document.removeEventListener("keydown", onKeyDown);
       if (overlay.isConnected) {
         overlay.remove();
       }
@@ -164,14 +174,6 @@ export function showInfoModal(
       resolve();
     };
 
-    // Escape key support
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        document.removeEventListener("keydown", onKeyDown);
-        cleanup();
-        resolve();
-      }
-    };
     document.addEventListener("keydown", onKeyDown);
 
     buttons.appendChild(okButton);

@@ -174,7 +174,13 @@ async function performPermissionRequest(
         if (permission !== "granted") return false;
 
         try {
-          const registration = await navigator.serviceWorker.ready;
+          // Avoid awaiting serviceWorker.ready when no SW is registered —
+          // that promise can hang indefinitely.
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (!registration?.active) {
+            return Notification.permission === "granted";
+          }
+
           await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: "<YOUR_PUBLIC_VAPID_KEY>",

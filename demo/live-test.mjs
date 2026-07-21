@@ -7,6 +7,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, "test-output");
 const BASE = process.env.DEMO_URL || "http://localhost:5173/";
 
+async function isDialogVisible(page, timeout = 2000) {
+  return page
+    .locator('[role="dialog"]')
+    .waitFor({ state: "visible", timeout })
+    .then(() => true)
+    .catch(() => false);
+}
+
 await mkdir(OUT, { recursive: true });
 
 const browser = await chromium.launch({ headless: true });
@@ -31,7 +39,12 @@ console.log("✓ Screenshot: 01-initial.png");
 
 // Click "Check all statuses"
 await page.click("#check-all");
-await page.waitForTimeout(1500);
+// Wait until at least one real status badge is painted (not the placeholder "—")
+await page
+  .locator("[data-status]")
+  .filter({ hasNotText: "—" })
+  .first()
+  .waitFor({ state: "visible", timeout: 5000 });
 
 const statuses = await page.$$eval("[data-status]", (els) =>
   els.map((el) => ({
@@ -51,14 +64,12 @@ console.log("✓ Screenshot: 02-after-check-all.png");
 // Subscribe to notifications changes
 const notifListen = page.locator('[data-listen="notifications"]');
 await notifListen.click();
-await page.waitForTimeout(400);
 
 // Request notifications — modal should appear
 const requestBtn = page.locator('[data-request="notifications"]');
 await requestBtn.click();
-await page.waitForTimeout(500);
 
-const modalVisible = await page.locator('[role="dialog"]').isVisible().catch(() => false);
+const modalVisible = await isDialogVisible(page);
 console.log(`\n=== requestPermission(notifications) modal visible: ${modalVisible}`);
 
 if (modalVisible) {
@@ -74,18 +85,18 @@ if (modalVisible) {
     // Grant notification permission via context before native prompt resolves
     await context.grantPermissions(["notifications"]);
     await continueBtn.click();
-    await page.waitForTimeout(1000);
+    await page
+      .locator('[role="dialog"]')
+      .waitFor({ state: "hidden", timeout: 3000 })
+      .catch(() => {});
   }
 }
 
-// Request something unsupported-ish in headless: bluetooth often unsupported
-// Actually bluetooth API may be missing → info modal
+// Request bluetooth — permission modal or unsupported guidance modal
 const bluetoothRequest = page.locator('[data-request="bluetooth"]');
 await bluetoothRequest.click();
-await page.waitForTimeout(600);
 
-const infoModal = page.locator('[role="dialog"]');
-const infoVisible = await infoModal.isVisible().catch(() => false);
+const infoVisible = await isDialogVisible(page);
 const infoTitle = infoVisible
   ? await page.locator('[role="dialog"] h2').innerText().catch(() => "")
   : "";
@@ -100,7 +111,10 @@ if (infoVisible) {
   const okBtn = page.locator('[role="dialog"] button').first();
   if (await okBtn.count()) {
     await okBtn.click();
-    await page.waitForTimeout(300);
+    await page
+      .locator('[role="dialog"]')
+      .waitFor({ state: "hidden", timeout: 2000 })
+      .catch(() => {});
   }
 }
 
