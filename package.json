@@ -9,6 +9,9 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
+    "demo:bundle": "npx --yes esbuild src/index.ts --bundle --format=esm --platform=browser --outfile=demo/library.js",
+    "demo": "npm run demo:bundle && python3 -m http.server 5173 --directory demo",
+    "demo:test": "node demo/live-test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

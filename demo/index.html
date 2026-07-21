@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser Permissions Helper — Live Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0f1115;
+        --panel: #1a1d24;
+        --border: #2a2f3a;
+        --text: #e8eaed;
+        --muted: #9aa0a6;
+        --accent: #4c8bf5;
+        --ok: #3dd68c;
+        --warn: #f5a524;
+        --bad: #f31260;
+        --unsupported: #a78bfa;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        background: radial-gradient(1200px 600px at 10% -10%, #1b2a4a 0%, transparent 50%),
+          radial-gradient(900px 500px at 100% 0%, #2a1b3d 0%, transparent 45%), var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      .wrap {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.75rem;
+        letter-spacing: -0.02em;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 28px;
+        line-height: 1.5;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px;
+        margin-bottom: 18px;
+      }
+
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .grid {
+        display: grid;
+        gap: 10px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto auto auto;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      @media (max-width: 720px) {
+        .row {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .name {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 0.8rem;
+        margin-top: 2px;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid var(--border);
+        background: #252a35;
+        color: var(--text);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: #3d4555;
+        background: #2c3240;
+      }
+
+      button.primary {
+        background: var(--accent);
+        border-color: transparent;
+        color: white;
+      }
+
+      button.primary:hover {
+        filter: brightness(1.08);
+      }
+
+      button.listen.active {
+        background: #2a3d2f;
+        border-color: var(--ok);
+        color: var(--ok);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border: 1px solid transparent;
+        min-width: 110px;
+        justify-content: center;
+      }
+
+      .badge.granted {
+        color: var(--ok);
+        background: rgba(61, 214, 140, 0.12);
+        border-color: rgba(61, 214, 140, 0.35);
+      }
+
+      .badge.denied {
+        color: var(--bad);
+        background: rgba(243, 18, 96, 0.12);
+        border-color: rgba(243, 18, 96, 0.35);
+      }
+
+      .badge.prompt {
+        color: var(--warn);
+        background: rgba(245, 165, 36, 0.12);
+        border-color: rgba(245, 165, 36, 0.35);
+      }
+
+      .badge.unsupported {
+        color: var(--unsupported);
+        background: rgba(167, 139, 250, 0.12);
+        border-color: rgba(167, 139, 250, 0.35);
+      }
+
+      .badge.unknown {
+        color: var(--muted);
+        background: rgba(154, 160, 166, 0.1);
+        border-color: var(--border);
+      }
+
+      .log {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.8rem;
+        line-height: 1.55;
+        max-height: 260px;
+        overflow: auto;
+        white-space: pre-wrap;
+        color: #c9d1d9;
+        background: #0d0f13;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        padding: 12px;
+      }
+
+      .log .ts {
+        color: var(--muted);
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+
+      .hint {
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.5;
+      }
+
+      code {
+        background: rgba(255, 255, 255, 0.06);
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Browser Permissions Helper</h1>
+      <p class="subtitle">
+        Live demo of <code>checkPermission</code>, <code>requestPermission</code>, and
+        <code>onPermissionChange</code> — including unsupported-feature handling.
+      </p>
+
+      <div class="panel">
+        <h2>Actions</h2>
+        <div class="toolbar">
+          <button id="check-all" class="primary" type="button">Check all statuses</button>
+          <button id="clear-log" type="button">Clear log</button>
+        </div>
+        <p class="hint">
+          Use <strong>Check</strong> to read status without prompting.
+          <strong>Request</strong> shows the custom modal, then the browser prompt.
+          <strong>Listen</strong> subscribes to live status changes (toggle off to unsubscribe).
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>Permissions</h2>
+        <div id="list" class="grid"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Event log</h2>
+        <div id="log" class="log">Waiting for actions…</div>
+      </div>
+    </div>
+
+    <script type="module">
+      import {
+        PermissionType,
+        checkPermission,
+        requestPermission,
+        onPermissionChange,
+        isPermissionFeatureSupported,
+        getPermissionSupportInfo,
+      } from "./library.js";
+
+      const listEl = document.getElementById("list");
+      const logEl = document.getElementById("log");
+      const unsubscribers = new Map();
+
+      const permissions = Object.values(PermissionType);
+
+      function stamp() {
+        return new Date().toLocaleTimeString();
+      }
+
+      function log(message, data) {
+        const line = document.createElement("div");
+        const extra =
+          data !== undefined ? ` ${typeof data === "string" ? data : JSON.stringify(data)}` : "";
+        line.innerHTML = `<span class="ts">[${stamp()}]</span> ${message}${extra}`;
+        if (logEl.textContent === "Waiting for actions…") {
+          logEl.textContent = "";
+        }
+        logEl.prepend(line);
+      }
+
+      function badgeClass(status) {
+        if (status === "granted") return "granted";
+        if (status === "denied") return "denied";
+        if (status === "prompt") return "prompt";
+        if (status === "unsupported") return "unsupported";
+        return "unknown";
+      }
+
+      function setStatus(permission, status) {
+        const badge = document.querySelector(`[data-status="${permission}"]`);
+        if (!badge) return;
+        badge.textContent = status;
+        badge.className = `badge ${badgeClass(status)}`;
+      }
+
+      function createRow(permission) {
+        const supported = isPermissionFeatureSupported(permission);
+        const info = getPermissionSupportInfo(permission);
+        const notes = info.notes ? ` · ${info.notes}` : "";
+        const browsers =
+          info.supportedBrowsers?.length > 0
+            ? info.supportedBrowsers.join(", ")
+            : "n/a";
+
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `
+          <div>
+            <div class="name">${permission}</div>
+            <div class="meta">
+              Feature API: ${supported ? "present" : "missing"} · Browsers: ${browsers}${notes}
+            </div>
+          </div>
+          <span class="badge unknown" data-status="${permission}">—</span>
+          <button type="button" data-check="${permission}">Check</button>
+          <button type="button" class="primary" data-request="${permission}">Request</button>
+          <button type="button" class="listen" data-listen="${permission}">Listen</button>
+        `;
+
+        // Re-grid: name | badge | buttons
+        row.style.gridTemplateColumns = "minmax(0,1.4fr) auto repeat(3, auto)";
+        return row;
+      }
+
+      for (const permission of permissions) {
+        listEl.appendChild(createRow(permission));
+      }
+
+      listEl.addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) return;
+
+        const check = target.getAttribute("data-check");
+        const request = target.getAttribute("data-request");
+        const listen = target.getAttribute("data-listen");
+
+        if (check) {
+          target.disabled = true;
+          try {
+            const status = await checkPermission(check);
+            setStatus(check, status);
+            log(`checkPermission("${check}") →`, status);
+          } catch (error) {
+            log(`checkPermission("${check}") error:`, String(error));
+          } finally {
+            target.disabled = false;
+          }
+        }
+
+        if (request) {
+          target.disabled = true;
+          try {
+            log(`requestPermission("${request}")…`);
+            const granted = await requestPermission(request);
+            log(`requestPermission("${request}") →`, granted ? "granted (true)" : "not granted (false)");
+            const status = await checkPermission(request);
+            setStatus(request, status);
+          } catch (error) {
+            log(`requestPermission("${request}") error:`, String(error));
+          } finally {
+            target.disabled = false;
+          }
+        }
+
+        if (listen) {
+          if (unsubscribers.has(listen)) {
+            unsubscribers.get(listen)();
+            unsubscribers.delete(listen);
+            target.classList.remove("active");
+            target.textContent = "Listen";
+            log(`unsubscribed from "${listen}"`);
+            return;
+          }
+
+          const unsubscribe = onPermissionChange(listen, (status) => {
+            setStatus(listen, status);
+            log(`onPermissionChange("${listen}") →`, status);
+          });
+          unsubscribers.set(listen, unsubscribe);
+          target.classList.add("active");
+          target.textContent = "Listening…";
+          log(`subscribed to "${listen}"`);
+        }
+      });
+
+      document.getElementById("check-all").addEventListener("click", async () => {
+        log("Checking all permissions…");
+        for (const permission of permissions) {
+          try {
+            const status = await checkPermission(permission);
+            setStatus(permission, status);
+            log(`checkPermission("${permission}") →`, status);
+          } catch (error) {
+            log(`checkPermission("${permission}") error:`, String(error));
+          }
+        }
+        log("Check-all complete.");
+      });
+
+      document.getElementById("clear-log").addEventListener("click", () => {
+        logEl.textContent = "Waiting for actions…";
+      });
+
+      log("Demo ready. Library loaded from ./library.js");
+    </script>
+  </body>
+</html>
