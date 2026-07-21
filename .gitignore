@@ -1,2 +1,4 @@
 node_modules/
 dist/
+demo/test-output/
+demo/library.js

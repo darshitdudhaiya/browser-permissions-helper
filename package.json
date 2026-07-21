@@ -9,6 +9,9 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
+    "demo:bundle": "npx --yes esbuild src/index.ts --bundle --format=esm --platform=browser --outfile=demo/library.js",
+    "demo": "npm run demo:bundle && http-server demo -p 5173 -c-1",
+    "demo:test": "node demo/live-test.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -22,6 +25,8 @@
     "typescript"
   ],
   "devDependencies": {
+    "http-server": "14.1.1",
+    "playwright": "^1.61.1",
     "typescript": "^5.8.2"
   }
 }

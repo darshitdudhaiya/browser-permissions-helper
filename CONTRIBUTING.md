@@ -36,6 +36,27 @@ We welcome feature suggestions! When proposing a new feature:
 -   Keep the PR focused on a single change or feature.
 -   Provide a meaningful description of the changes made.
 
+### 📦 Releases (version bump on merge to `main`)
+
+You do **not** need to edit `package.json` version by hand. Merging into `main` runs the publish workflow, which bumps the version, publishes to npm, tags git, and creates a GitHub Release.
+
+Choose the bump type (default is **patch**):
+
+| Method | How |
+|--------|-----|
+| **PR label** (recommended) | Add one of: `release:patch`, `release:minor`, `release:major` (aliases: `patch`, `minor`, `major`) |
+| **Commit / merge message** | Include `[patch]`, `[minor]`, or `[major]` (also `release:minor`, `#minor`, etc.) |
+| **Manual run** | Actions → **Publish NPM Package** → **Run workflow** → pick bump |
+
+**Guidance**
+
+- **patch** — bug fixes, small improvements (`4.3.6` → `4.3.7`)
+- **minor** — new features, non-breaking API additions (`4.3.6` → `4.4.0`)
+- **major** — breaking changes (`4.3.6` → `5.0.0`)
+
+If several signals are present, priority is: workflow input → commit message → PR label → default `patch`.  
+If multiple release labels exist on a PR, the highest impact wins (`major` > `minor` > `patch`).
+
 ### 🌟 Code Style & Best Practices
 
 -   Follow clean and consistent coding standards.

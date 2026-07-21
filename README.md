@@ -9,7 +9,8 @@ A simple utility to manage and request browser permissions seamlessly. This pack
 
 - ✅ Check the current permission status for various browser APIs.
 - 🔄 Request permissions dynamically.
-- 📢 Handle permission changes efficiently.
+- 📢 Listen to permission status changes in real time.
+- 🛡️ Clear handling for unsupported browsers and features.
 - 🎯 Lightweight and easy to integrate.
 
 ## ✨ Preview
@@ -39,7 +40,9 @@ import {
   PermissionType,
   checkPermission,
   requestPermission,
-  getPermissionSupportInfo
+  getPermissionSupportInfo,
+  onPermissionChange,
+  isPermissionFeatureSupported,
 } from 'browser-permissions-helper';
 ```
 
@@ -47,6 +50,7 @@ import {
 
 ```javascript
 const status = await checkPermission(PermissionType.Geolocation);
+// "granted" | "denied" | "prompt" | "unsupported"
 console.log(`Geolocation permission: ${status}`);
 ```
 
@@ -57,12 +61,34 @@ const result = await requestPermission(PermissionType.Notifications);
 console.log(`Notification permission granted: ${result}`);
 ```
 
+If the feature is not available in the current browser, an informational modal is shown with supported-browser guidance and the promise resolves to `false`.
+
+### Listen for Permission Changes
+
+```javascript
+const unsubscribe = onPermissionChange(PermissionType.Camera, (status) => {
+  console.log('Camera permission changed to:', status);
+  // Update UI or disable features when status becomes "denied" / "unsupported"
+});
+
+// Later, when the listener is no longer needed:
+unsubscribe();
+```
+
 ### Get Browser Support Info for permission
 
 ```javascript
 const info = getPermissionSupportInfo(PermissionType.Bluetooth);
 console.log(info.supportedBrowsers); // ['Chrome', 'Edge']
 console.log(info.notes); // 'Not supported in Firefox or Safari'
+```
+
+### Detect Feature Support
+
+```javascript
+if (!isPermissionFeatureSupported(PermissionType.Bluetooth)) {
+  console.log('Bluetooth is not available in this browser.');
+}
 ```
 
 
@@ -88,13 +114,22 @@ console.log(info.notes); // 'Not supported in Firefox or Safari'
 
 ## 📖 API Reference
 
-### `checkPermission(permissionType: PermissionType) => Promise<'granted' | 'denied' | 'prompt'>`
-Checks the current status of a given permission.
+### `checkPermission(permissionType: PermissionType) => Promise<'granted' | 'denied' | 'prompt' | 'unsupported'>`
+Checks the current status of a given permission **without** prompting the user.
+
+| Return value | Meaning |
+|--------------|---------|
+| `granted` | Permission is currently granted |
+| `denied` | Permission is currently denied |
+| `prompt` | Browser will ask the user (or status cannot be queried without prompting) |
+| `unsupported` | Browser/feature cannot handle this permission |
 
 ### `requestPermission(permissionType: PermissionType, styleOptions?: ModalStyleOptions) => Promise<boolean>`
 Requests the specified permission from the user and returns `true` if granted, otherwise `false`.
 
-This function displays a customizable modal to the user before the native browser permission prompt appears. The Reject button includes a 15‑second countdown; when it reaches zero, the request resolves to `false`.
+This function displays a customizable modal to the user before the native browser permission prompt appears. The Reject button includes a 15‑second countdown; when it reaches zero, the request resolves to `false`. Modal elements are always removed from the DOM (success, reject, timeout, or error).
+
+When the underlying feature is not supported, an informational modal is shown instead and the function returns `false`.
 
 #### Styling the Modal
 
@@ -126,9 +161,21 @@ The `ModalStyleOptions` interface has the following properties:
 - `buttonRejectBackgroundColor?: string`
 - `buttonRejectTextColor?: string`
 - `buttonBorderRadius?: string`
+- `overlayBackgroundColor?: string`
+- `overlayZIndex?: number | string`
+
+### `onPermissionChange(permissionType: PermissionType, callback: (status) => void) => () => void`
+Subscribes to real-time permission status changes via the native Permissions API (`PermissionStatus.onchange`).
+
+- Invokes the callback with the **current** status as soon as the subscription is ready
+- Returns an **unsubscribe** function
+- Calls the callback with `"unsupported"` when the Permissions API or feature is unavailable
 
 ### `getPermissionSupportInfo(permissionType: PermissionType) => { supportedBrowsers: string[]; notes?: string; }`
 Returns a list of browsers that support the given permission, with optional notes for caveats or limited support.
+
+### `isPermissionFeatureSupported(permissionType: PermissionType) => boolean`
+Returns whether the underlying browser API for this permission is present (does not check grant/deny status).
 
 ## 🛡️ Browser Compatibility
 This package works in modern browsers that support the **Permissions API**.
@@ -140,7 +187,9 @@ This package works in modern browsers that support the **Permissions API**.
 | Edge     | ✅ Yes   |
 | Safari   | ✅ Partial (Some permissions may not be available) |
 
-> 💡 Use `getPermissionSupportInfo()` to programmatically check support for specific permission.
+When a permission or the Permissions API is unavailable, the library returns `"unsupported"` (for checks/listeners) or shows guidance and returns `false` (for requests) instead of silently treating the case as `"denied"`.
+
+> 💡 Use `getPermissionSupportInfo()` or `isPermissionFeatureSupported()` to programmatically check support for specific permissions.
 
 
 ## 🤝 Contributing
@@ -155,4 +204,3 @@ For any queries or issues, please [open an issue](https://github.com/darshitdudh
 ---
 
 ⭐ **If you find this package useful, consider giving it a star on GitHub!** ⭐
-
