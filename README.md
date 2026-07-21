@@ -195,11 +195,15 @@ When a permission or the Permissions API is unavailable, the library returns `"u
 ## 🤝 Contributing
 Contributions are welcome! Feel free to fork the repository, create a feature branch, and submit a PR.
 
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) and our [Code of Conduct](CODE_OF_CONDUCT.md) before contributing.
+
 ## 📜 License
 This project is licensed under the **MIT License**.
 
 ## 📬 Contact
 For any queries or issues, please [open an issue](https://github.com/darshitdudhaiya/browser-permissions-helper/issues).
+
+To report a Code of Conduct concern privately, email **darshitdudhaiya201@gmail.com** (see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)).
 
 ---
 

@@ -3,6 +3,10 @@
 
 Thank you for considering contributing to **Browser Permission Helper**! Your contributions help improve the project and benefit the community. Before you start, please read the following guidelines to ensure a smooth collaboration.
 
+By participating in this project, you agree to abide by our
+[Code of Conduct](CODE_OF_CONDUCT.md). Please read it before opening issues,
+pull requests, or otherwise engaging with the community.
+
 ## 💡 How to Contribute
 
 
@@ -86,6 +90,12 @@ If multiple release labels exist on a PR, the highest impact wins (`major` > `mi
 ### 📜 License
 
 By contributing, you agree that your contributions will be licensed under the same license as the repository.
+
+### 🤝 Code of Conduct
+
+This project follows the [Contributor Covenant](https://www.contributor-covenant.org/) Code of Conduct.
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for standards, enforcement, and how to report concerns
+(privately: **darshitdudhaiya201@gmail.com**).
 
 💬 Need Help?
 -------------
