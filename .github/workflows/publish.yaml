@@ -14,6 +14,14 @@ name: 🚀 Publish NPM Package
 #   - Feature PR: add label `release:minor`, then merge
 #   - Hotfix: merge as usual (patch) or label `release:patch`
 #   - Breaking change: label `release:major` or put [major] in the merge commit message
+#
+# Auth notes:
+#   - Checkout/push use the built-in GITHUB_TOKEN (permissions.contents: write).
+#   - Do not pass an expired/empty GH_PAT into actions/checkout — that fails with:
+#     "could not read Username for 'https://github.com': terminal prompts disabled"
+#   - Optional: if branch protection blocks the default token, create a fine-grained
+#     PAT with Contents: Read/Write, store as GH_PAT, and set checkout token to secrets.GH_PAT
+#     only after verifying the token works.
 
 on:
   push:
@@ -38,20 +46,25 @@ permissions:
 jobs:
   publish:
     # Skip the bot's own version-bump commit (also uses [skip ci] in message)
-    if: github.actor != 'github-actions[bot]'
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && !(github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]'))
     runs-on: ubuntu-latest
 
     steps:
       - name: 🛎️ Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          token: ${{ secrets.GH_PAT }} # required for pushing version bump back to main
+          # Built-in token — reliable for same-repo checkout + version-bump push.
+          # (Expired/invalid secrets.GH_PAT breaks git fetch with exit 128.)
+          token: ${{ github.token }}
           fetch-depth: 0
+          persist-credentials: true
 
       - name: 📦 Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 24
           registry-url: "https://registry.npmjs.org/"
 
       - name: 📥 Install Dependencies
@@ -60,7 +73,7 @@ jobs:
       - name: 🔎 Resolve bump type
         id: bump
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -103,8 +116,6 @@ jobs:
           # 3) Labels on PR(s) associated with this commit
           if [ -z "$BUMP" ]; then
             SHA="${{ github.sha }}"
-            # commits/{sha}/pulls requires Accept header for the preview/media type historically;
-            # gh handles this. May return empty for direct pushes to main.
             LABELS="$(gh api "repos/${{ github.repository }}/commits/${SHA}/pulls" \
               --jq '.[].labels[].name' 2>/dev/null || true)"
             echo "Associated PR labels:"
@@ -158,7 +169,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json
           git commit -m "🔖 Bump version to ${{ env.new_version }} (${{ env.bump_type }}) [skip ci]"
-          git push origin main
+          git push origin HEAD:main
 
       - name: 🚀 Publish to NPM
         run: npm publish
@@ -184,4 +195,4 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
