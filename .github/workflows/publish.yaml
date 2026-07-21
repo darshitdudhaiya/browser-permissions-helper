@@ -15,13 +15,14 @@ name: 🚀 Publish NPM Package
 #   - Hotfix: merge as usual (patch) or label `release:patch`
 #   - Breaking change: label `release:major` or put [major] in the merge commit message
 #
-# Auth notes:
-#   - Checkout/push use the built-in GITHUB_TOKEN (permissions.contents: write).
-#   - Do not pass an expired/empty GH_PAT into actions/checkout — that fails with:
+# Auth notes (main is protected by repository rulesets):
+#   - Direct pushes to main are blocked for normal contributors; merge via PR.
+#   - Version-bump commits must use secrets.GH_PAT (repo admin / owner PAT with
+#     Contents: Read and Write). GITHUB_TOKEN cannot bypass rulesets on personal repos.
+#   - GH_PAT must be valid — an expired/empty PAT fails checkout with:
 #     "could not read Username for 'https://github.com': terminal prompts disabled"
-#   - Optional: if branch protection blocks the default token, create a fine-grained
-#     PAT with Contents: Read/Write, store as GH_PAT, and set checkout token to secrets.GH_PAT
-#     only after verifying the token works.
+#   - NPM_TOKEN is required for npm publish.
+#   - Version-bump commits include [skip ci] so publish does not loop.
 
 on:
   push:
@@ -52,12 +53,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: 🔐 Verify release secrets
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "${GH_PAT}" ]; then
+            echo "::error::GH_PAT secret is required so the version-bump can push to protected main (admin bypass)."
+            missing=1
+          fi
+          if [ -z "${NPM_TOKEN}" ]; then
+            echo "::error::NPM_TOKEN secret is required for npm publish."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Release secrets are present."
+
       - name: 🛎️ Checkout Repository
         uses: actions/checkout@v5
         with:
-          # Built-in token — reliable for same-repo checkout + version-bump push.
-          # (Expired/invalid secrets.GH_PAT breaks git fetch with exit 128.)
-          token: ${{ github.token }}
+          # Owner/admin PAT bypasses the "Protect main" ruleset for the version bump.
+          token: ${{ secrets.GH_PAT }}
           fetch-depth: 0
           persist-credentials: true
 

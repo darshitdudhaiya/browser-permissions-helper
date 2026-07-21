@@ -36,9 +36,29 @@ We welcome feature suggestions! When proposing a new feature:
 -   Keep the PR focused on a single change or feature.
 -   Provide a meaningful description of the changes made.
 
+### 🔒 Branch protection (`main`)
+
+`main` is protected by **repository rulesets**:
+
+- Pull request required (no direct pushes for normal workflows)
+- Force push and branch deletion blocked
+- Linear history required
+- Required status check: **GitGuardian Security Checks**
+- **Repository admins** may bypass (for emergencies and the release bot using `GH_PAT`)
+- Release **tags** are also protected from force-update/deletion
+
+Work on a feature branch and open a PR into `main`.
+
 ### 📦 Releases (version bump on merge to `main`)
 
 You do **not** need to edit `package.json` version by hand. Merging into `main` runs the publish workflow, which bumps the version, publishes to npm, tags git, and creates a GitHub Release.
+
+**Secrets required on the repo (Settings → Secrets → Actions):**
+
+| Secret | Purpose |
+|--------|---------|
+| `GH_PAT` | Fine-grained (or classic) PAT of a **repo admin**, Contents read/write — pushes the version-bump commit past rulesets |
+| `NPM_TOKEN` | npm automation/granular token with publish access |
 
 Choose the bump type (default is **patch**):
 
