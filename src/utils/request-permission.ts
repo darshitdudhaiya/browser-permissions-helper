@@ -1,4 +1,8 @@
 import { PermissionType } from "../enums/permission-type.enum";
+import type {
+  PermissionRequestOptions,
+  PermissionRequestResult,
+} from "../types/permission-request";
 import { getPermissionSupportInfo } from "./get-permission-support-info";
 import { isPermissionFeatureSupported } from "./feature-support";
 import {
@@ -6,6 +10,7 @@ import {
   showInfoModal,
   ModalStyleOptions,
 } from "./modal";
+import { observeStatus } from "./observe-status";
 
 function unsupportedMessage(permissionName: PermissionType): {
   title: string;
@@ -25,72 +30,182 @@ function unsupportedMessage(permissionName: PermissionType): {
   };
 }
 
+function resolveStyleOptions(
+  options: PermissionRequestOptions = {}
+): ModalStyleOptions {
+  const { ui: _ui, styleOptions, ...legacyStyle } = options;
+  return { ...legacyStyle, ...styleOptions };
+}
+
+function unsupportedResult(): PermissionRequestResult {
+  return { granted: false, status: "unsupported", reason: "unsupported" };
+}
+
+async function grantedResult(
+  permissionName: PermissionType
+): Promise<PermissionRequestResult> {
+  const status = await observeStatus(permissionName);
+  return { granted: true, status, reason: "granted" };
+}
+
+async function deniedResult(
+  permissionName: PermissionType
+): Promise<PermissionRequestResult> {
+  const status = await observeStatus(permissionName);
+  return { granted: false, status, reason: "denied" };
+}
+
+async function notRequestedResult(
+  permissionName: PermissionType
+): Promise<PermissionRequestResult> {
+  const status = await observeStatus(permissionName);
+  return { granted: false, status, reason: "not-requested" };
+}
+
+async function errorResult(
+  permissionName: PermissionType,
+  error: unknown
+): Promise<PermissionRequestResult> {
+  const status = await observeStatus(permissionName);
+  return { granted: false, status, reason: "error", error };
+}
+
+function isNamedError(error: unknown, ...names: string[]): boolean {
+  if (!error || typeof error !== "object") return false;
+  const name = (error as { name?: string }).name;
+  return typeof name === "string" && names.includes(name);
+}
+
+function isUserAbortException(error: unknown): boolean {
+  return isNamedError(error, "NotAllowedError", "PermissionDeniedError");
+}
+
+async function fromUserAbort(
+  permissionName: PermissionType
+): Promise<PermissionRequestResult> {
+  const status = await observeStatus(permissionName);
+  if (status === "denied") {
+    return { granted: false, status, reason: "denied" };
+  }
+  return { granted: false, status, reason: "dismissed" };
+}
+
+async function fromException(
+  permissionName: PermissionType,
+  error: unknown
+): Promise<PermissionRequestResult> {
+  if (isUserAbortException(error)) {
+    return fromUserAbort(permissionName);
+  }
+  return errorResult(permissionName, error);
+}
+
+async function fromNotificationPermission(
+  permissionName: PermissionType,
+  permission: NotificationPermission
+): Promise<PermissionRequestResult> {
+  if (permission === "granted") {
+    return grantedResult(permissionName);
+  }
+  if (permission === "default") {
+    const status = await observeStatus(permissionName);
+    return { granted: false, status, reason: "dismissed" };
+  }
+  return fromUserAbort(permissionName);
+}
+
+async function requestMedia(
+  permissionName: PermissionType,
+  getStream: () => Promise<MediaStream>
+): Promise<PermissionRequestResult> {
+  try {
+    const stream = await getStream();
+    stream.getTracks().forEach((track) => track.stop());
+    return grantedResult(permissionName);
+  } catch (error) {
+    return fromException(permissionName, error);
+  }
+}
+
 async function performPermissionRequest(
   permissionName: PermissionType
-): Promise<boolean> {
+): Promise<PermissionRequestResult> {
   switch (permissionName) {
     case PermissionType.Geolocation:
       return new Promise((resolve) => {
         if (!navigator.geolocation) {
-          resolve(false);
+          resolve(unsupportedResult());
           return;
         }
         navigator.geolocation.getCurrentPosition(
-          () => resolve(true),
-          () => resolve(false),
+          () => {
+            void grantedResult(permissionName).then(resolve);
+          },
+          (error) => {
+            if (error.code === 1) {
+              void fromUserAbort(permissionName).then(resolve);
+              return;
+            }
+            void errorResult(permissionName, error).then(resolve);
+          },
           { maximumAge: 0, timeout: 10000 }
         );
       });
 
     case PermissionType.ClipboardWrite:
       try {
-        // Prefer Permissions API so we never write to the clipboard
         if (navigator.permissions?.query) {
           const permission = await navigator.permissions.query({
             name: "clipboard-write" as PermissionName,
           });
-          return permission.state === "granted";
+          if (permission.state === "granted") {
+            return grantedResult(permissionName);
+          }
+          if (permission.state === "denied") {
+            return fromUserAbort(permissionName);
+          }
+          return notRequestedResult(permissionName);
         }
-        // Fallback: presence of clipboard API only — do not write dummy text
-        return !!(navigator.clipboard && navigator.clipboard.writeText);
-      } catch {
-        return false;
+        if (typeof navigator.clipboard?.writeText === "function") {
+          return grantedResult(permissionName);
+        }
+        return unsupportedResult();
+      } catch (error) {
+        return fromException(permissionName, error);
       }
 
     case PermissionType.Notifications:
       if ("Notification" in window) {
-        const permission = await Notification.requestPermission();
-        return permission === "granted";
+        try {
+          const permission = await Notification.requestPermission();
+          return fromNotificationPermission(permissionName, permission);
+        } catch (error) {
+          return fromException(permissionName, error);
+        }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.Camera:
     case PermissionType.CameraAdvanced:
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) return false;
-        const stream = await navigator.mediaDevices.getUserMedia({
+      if (!navigator.mediaDevices?.getUserMedia) {
+        return unsupportedResult();
+      }
+      return requestMedia(permissionName, () =>
+        navigator.mediaDevices.getUserMedia({
           video:
             permissionName === PermissionType.CameraAdvanced
               ? { width: 1920, height: 1080, facingMode: "user" }
               : true,
-        });
-        stream.getTracks().forEach((track) => track.stop());
-        return true;
-      } catch {
-        return false;
-      }
+        })
+      );
 
     case PermissionType.Microphone:
-      try {
-        if (!navigator.mediaDevices?.getUserMedia) return false;
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        stream.getTracks().forEach((track) => track.stop());
-        return true;
-      } catch {
-        return false;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        return unsupportedResult();
       }
+      return requestMedia(permissionName, () =>
+        navigator.mediaDevices.getUserMedia({ audio: true })
+      );
 
     case PermissionType.SpeakerSelection:
       if (
@@ -99,12 +214,12 @@ async function performPermissionRequest(
       ) {
         try {
           await (navigator.mediaDevices as any).selectAudioOutput();
-          return true;
-        } catch {
-          return false;
+          return grantedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.Bluetooth:
       if ("bluetooth" in navigator) {
@@ -112,35 +227,44 @@ async function performPermissionRequest(
           await (navigator as any).bluetooth.requestDevice({
             acceptAllDevices: true,
           });
-          return true;
-        } catch {
-          return false;
+          return grantedResult(permissionName);
+        } catch (error) {
+          if (isUserAbortException(error)) {
+            return fromUserAbort(permissionName);
+          }
+          if (isNamedError(error, "NotFoundError")) {
+            const status = await observeStatus(permissionName);
+            if (status === "denied") {
+              return { granted: false, status, reason: "denied" };
+            }
+          }
+          return errorResult(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.Midi:
       if (navigator.requestMIDIAccess) {
         try {
           await navigator.requestMIDIAccess();
-          return true;
-        } catch {
-          return false;
+          return grantedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.NFC:
       if ("NDEFReader" in window) {
         try {
           const nfc = new (window as any).NDEFReader();
           await nfc.scan();
-          return true;
-        } catch {
-          return false;
+          return grantedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.ScreenWakeLock:
       if ("wakeLock" in navigator) {
@@ -151,48 +275,60 @@ async function performPermissionRequest(
           } catch {
             /* ignore release errors */
           }
-          return true;
-        } catch {
-          return false;
+          return grantedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.PersistentStorage:
       if (navigator.storage?.persist) {
         try {
-          return await navigator.storage.persist();
-        } catch {
-          return false;
+          const persisted = await navigator.storage.persist();
+          if (persisted) {
+            return grantedResult(permissionName);
+          }
+          return deniedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.Push:
       if ("Notification" in window && "serviceWorker" in navigator) {
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") return false;
+        let permission: NotificationPermission;
+        try {
+          permission = await Notification.requestPermission();
+        } catch (error) {
+          return fromException(permissionName, error);
+        }
+
+        if (permission !== "granted") {
+          return fromNotificationPermission(permissionName, permission);
+        }
 
         try {
-          // Avoid awaiting serviceWorker.ready when no SW is registered —
-          // that promise can hang indefinitely.
           const registration = await navigator.serviceWorker.getRegistration();
           if (!registration?.active) {
-            return Notification.permission === "granted";
+            return grantedResult(permissionName);
           }
 
           await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: "<YOUR_PUBLIC_VAPID_KEY>",
           });
-          return true;
-        } catch {
-          // Notification permission may still be granted even if push
-          // subscription fails (e.g. missing VAPID key configuration).
-          return Notification.permission === "granted";
+          return grantedResult(permissionName);
+        } catch (error) {
+          if (Notification.permission === "granted") {
+            const status = await observeStatus(permissionName);
+            return { granted: true, status, reason: "granted", error };
+          }
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.IdleDetection:
       if ("IdleDetector" in window) {
@@ -200,78 +336,107 @@ async function performPermissionRequest(
           const permission = await (
             window as any
           ).IdleDetector.requestPermission();
-          return permission === "granted";
-        } catch {
-          return false;
+          if (permission === "granted") {
+            return grantedResult(permissionName);
+          }
+          if (permission === "denied") {
+            return fromUserAbort(permissionName);
+          }
+          return deniedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.StorageAccess:
       if ("requestStorageAccess" in document) {
         try {
           await (document as any).requestStorageAccess();
-          return true;
-        } catch {
-          return false;
+          return grantedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     case PermissionType.DisplayCapture:
-      try {
-        if (!navigator.mediaDevices?.getDisplayMedia) return false;
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-        });
-        stream.getTracks().forEach((track) => track.stop());
-        return true;
-      } catch {
-        return false;
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        return unsupportedResult();
       }
+      return requestMedia(permissionName, () =>
+        navigator.mediaDevices.getDisplayMedia({ video: true })
+      );
 
     case PermissionType.WindowManagement:
       if ("getScreenDetails" in window) {
         try {
           await (window as any).getScreenDetails();
-          return true;
-        } catch {
-          return false;
+          return grantedResult(permissionName);
+        } catch (error) {
+          return fromException(permissionName, error);
         }
       }
-      return false;
+      return unsupportedResult();
 
     default:
       console.warn(
         `[browser-permissions-helper] Manual request required for "${permissionName}".`
       );
-      return false;
+      return unsupportedResult();
   }
 }
 
 /**
  * Requests the specified permission from the user.
  *
- * Shows a customizable pre-prompt modal, then the native browser prompt.
- * When the permission feature is unavailable, shows an informational modal
- * with supported-browser guidance and returns `false`.
+ * Default `ui` is `"modal"` (v4.4 behavior): a customizable pre-prompt, then
+ * the native browser prompt. Pass `{ ui: "none" }` to skip the library modal.
+ *
+ * Returns `true` only when this request succeeded. For dismissed vs denied vs
+ * unsupported vs error, use {@link requestPermissionDetailed}.
  */
 export async function requestPermission(
   permissionName: PermissionType,
-  styleOptions: ModalStyleOptions = {}
+  options: PermissionRequestOptions = {}
 ): Promise<boolean> {
+  const result = await requestPermissionDetailed(permissionName, options);
+  return result.granted;
+}
+
+/**
+ * Requests the specified permission and returns a structured result.
+ *
+ * `status` is always the observed Permissions / Notification state after the
+ * event. `reason` is derived from the pair (event, observed status).
+ */
+export async function requestPermissionDetailed(
+  permissionName: PermissionType,
+  options: PermissionRequestOptions = {}
+): Promise<PermissionRequestResult> {
+  const ui = options.ui ?? "modal";
+  const styleOptions = resolveStyleOptions(options);
+
   if (!isPermissionFeatureSupported(permissionName)) {
-    const { title, message } = unsupportedMessage(permissionName);
     console.warn(
       `[browser-permissions-helper] Cannot request "${permissionName}": feature not supported in this browser.`
     );
-    await showInfoModal(title, message, styleOptions);
-    return false;
+    if (ui === "modal") {
+      const { title, message } = unsupportedMessage(permissionName);
+      await showInfoModal(title, message, styleOptions);
+    }
+    return {
+      granted: false,
+      status: "unsupported",
+      reason: "unsupported",
+    };
   }
 
-  return withPermissionModal(
-    permissionName,
-    () => performPermissionRequest(permissionName),
-    styleOptions
-  );
+  const runNative = () => performPermissionRequest(permissionName);
+
+  if (ui === "none") {
+    return runNative();
+  }
+
+  return withPermissionModal(permissionName, runNative, styleOptions);
 }

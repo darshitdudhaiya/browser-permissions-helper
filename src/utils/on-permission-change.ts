@@ -8,11 +8,27 @@ import {
   toPermissionsQueryName,
 } from "./feature-support";
 
+function mapNotificationPermission(
+  permission: NotificationPermission
+): PermissionCheckResult {
+  if (permission === "default") return "prompt";
+  return permission;
+}
+
 /**
  * Subscribes to permission status changes for a given permission type.
  *
  * Uses the native `PermissionStatus.onchange` event when available.
  * Returns an unsubscribe function. Safe to call multiple times.
+ *
+ * Notifications / push emit the current `Notification.permission` immediately
+ * (mapped `"default"` → `"prompt"`). If `permissions.query` later succeeds,
+ * that subscription takes over for live settings changes.
+ *
+ * When the feature is present but cannot be queried (missing Permissions API,
+ * no query name, or `query` throws), this warns and stays silent instead of
+ * emitting `"unsupported"` — that signal was wrong for Safari notifications
+ * and some camera queries.
  *
  * @example
  * ```ts
@@ -53,9 +69,21 @@ export function onPermissionChange(
   };
 
   if (!isPermissionFeatureSupported(permissionName)) {
-    // Notify once asynchronously so subscribers still learn the state
     queueMicrotask(() => safeCallback("unsupported"));
     return unsubscribe;
+  }
+
+  const isNotificationFamily =
+    permissionName === PermissionType.Notifications ||
+    permissionName === PermissionType.Push;
+
+  if (
+    isNotificationFamily &&
+    typeof window !== "undefined" &&
+    "Notification" in window
+  ) {
+    const initial = mapNotificationPermission(Notification.permission);
+    queueMicrotask(() => safeCallback(initial));
   }
 
   if (
@@ -63,14 +91,15 @@ export function onPermissionChange(
     !navigator.permissions ||
     typeof navigator.permissions.query !== "function"
   ) {
-    queueMicrotask(() => safeCallback("unsupported"));
+    console.warn(
+      "[browser-permissions-helper] Permissions API is not supported in this browser."
+    );
     return unsubscribe;
   }
 
   const queryName = toPermissionsQueryName(permissionName);
 
   if (!queryName) {
-    // Cannot subscribe without a queryable permission name
     console.warn(
       `[browser-permissions-helper] Permission change events are not available for "${permissionName}".`
     );
@@ -83,7 +112,6 @@ export function onPermissionChange(
       if (!active) return;
       permissionStatus = status;
 
-      // Emit current state immediately so consumers can sync UI
       safeCallback(status.state);
 
       status.onchange = () => {
@@ -95,9 +123,6 @@ export function onPermissionChange(
         `[browser-permissions-helper] Unable to subscribe to changes for "${permissionName}":`,
         error
       );
-      if (active) {
-        safeCallback("unsupported");
-      }
     });
 
   return unsubscribe;
