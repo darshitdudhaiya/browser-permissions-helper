@@ -8,7 +8,8 @@ A simple utility to manage and request browser permissions seamlessly. This pack
 ## 🚀 Features
 
 - ✅ Check the current permission status for various browser APIs.
-- 🔄 Request permissions dynamically.
+- 🔄 Request permissions dynamically (`ui: "none"` skips the library modal).
+- 📋 Structured results via `requestPermissionDetailed` (dismissed vs denied vs unsupported).
 - 📢 Listen to permission status changes in real time.
 - 🛡️ Clear handling for unsupported browsers and features.
 - 🎯 Lightweight and easy to integrate.
@@ -40,6 +41,7 @@ import {
   PermissionType,
   checkPermission,
   requestPermission,
+  requestPermissionDetailed,
   getPermissionSupportInfo,
   onPermissionChange,
   isPermissionFeatureSupported,
@@ -57,11 +59,22 @@ console.log(`Geolocation permission: ${status}`);
 ### Request Permission
 
 ```javascript
-const result = await requestPermission(PermissionType.Notifications);
-console.log(`Notification permission granted: ${result}`);
+const granted = await requestPermission(PermissionType.Notifications);
+console.log(`Notification permission granted: ${granted}`);
+
+// Skip the library pre-prompt and go straight to the native prompt
+await requestPermission(PermissionType.Camera, { ui: 'none' });
+
+// Distinguish dismissed vs denied vs unsupported
+const detailed = await requestPermissionDetailed(PermissionType.Camera, {
+  ui: 'none',
+});
+console.log(detailed.granted, detailed.status, detailed.reason);
 ```
 
-If the feature is not available in the current browser, an informational modal is shown with supported-browser guidance and the promise resolves to `false`.
+`requestPermission` still returns a boolean. Default `ui` is `"modal"` (same pre-prompt as v4.4). Pass `{ ui: "none" }` for the native prompt only. Existing style objects such as `{ modalBackgroundColor: "#333" }` still work.
+
+If the feature is not available in the current browser and `ui` is `"modal"`, an informational modal is shown with supported-browser guidance and the promise resolves to `false`.
 
 ### Listen for Permission Changes
 
@@ -124,12 +137,33 @@ Checks the current status of a given permission **without** prompting the user.
 | `prompt` | Browser will ask the user (or status cannot be queried without prompting) |
 | `unsupported` | Browser/feature cannot handle this permission |
 
-### `requestPermission(permissionType: PermissionType, styleOptions?: ModalStyleOptions) => Promise<boolean>`
-Requests the specified permission from the user and returns `true` if granted, otherwise `false`.
+### `requestPermission(permissionType: PermissionType, options?: PermissionRequestOptions) => Promise<boolean>`
+Requests the specified permission from the user and returns `true` if **this** request succeeded, otherwise `false`.
 
-This function displays a customizable modal to the user before the native browser permission prompt appears. The Reject button includes a 15‑second countdown; when it reaches zero, the request resolves to `false`. Modal elements are always removed from the DOM (success, reject, timeout, or error).
+`PermissionRequestOptions` extends `ModalStyleOptions` with:
 
-When the underlying feature is not supported, an informational modal is shown instead and the function returns `false`.
+- `ui?: "modal" | "none"` — default `"modal"` (v4.4 pre-prompt). `"none"` skips the library modal.
+- `styleOptions?: ModalStyleOptions` — preferred place for styles; merged over top-level style keys.
+
+When `ui` is `"modal"`, a customizable dialog appears before the native prompt. The Reject button includes a 15‑second countdown. Modal elements are always removed from the DOM (success, reject, timeout, or error).
+
+When the underlying feature is not supported and `ui` is `"modal"`, an informational modal is shown instead and the function returns `false`.
+
+For dismissed vs denied vs unsupported vs error, use `requestPermissionDetailed`.
+
+### `requestPermissionDetailed(permissionType: PermissionType, options?: PermissionRequestOptions) => Promise<PermissionRequestResult>`
+Same request path as `requestPermission`, but returns:
+
+```ts
+{
+  granted: boolean;
+  status: "granted" | "denied" | "prompt" | "unsupported";
+  reason: "granted" | "denied" | "dismissed" | "unsupported" | "error" | "not-requested";
+  error?: unknown;
+}
+```
+
+`status` is the observed Permissions / Notification state after the event. `reason` is derived from the event plus that observed status (e.g. modal Reject → `"dismissed"`; native `NotAllowedError` + `"denied"` → `"denied"`; native cancel that leaves `"prompt"` → `"dismissed"`).
 
 #### Styling the Modal
 
@@ -169,7 +203,9 @@ Subscribes to real-time permission status changes via the native Permissions API
 
 - Invokes the callback with the **current** status as soon as the subscription is ready
 - Returns an **unsubscribe** function
-- Calls the callback with `"unsupported"` when the Permissions API or feature is unavailable
+- Calls the callback with `"unsupported"` only when the **feature** is unavailable
+- When the feature exists but cannot be queried (Safari quirks, missing Permissions API, no query name), warns and stays silent instead of emitting `"unsupported"`
+- Notifications / push emit mapped `Notification.permission` immediately (`"default"` → `"prompt"`)
 
 ### `getPermissionSupportInfo(permissionType: PermissionType) => { supportedBrowsers: string[]; notes?: string; }`
 Returns a list of browsers that support the given permission, with optional notes for caveats or limited support.
@@ -187,7 +223,7 @@ This package works in modern browsers that support the **Permissions API**.
 | Edge     | ✅ Yes   |
 | Safari   | ✅ Partial (Some permissions may not be available) |
 
-When a permission or the Permissions API is unavailable, the library returns `"unsupported"` (for checks/listeners) or shows guidance and returns `false` (for requests) instead of silently treating the case as `"denied"`.
+When a permission feature is unavailable, the library returns `"unsupported"` (for checks) or shows guidance and returns `false` (for modal requests) instead of silently treating the case as `"denied"`. Listeners only emit `"unsupported"` when the feature itself is missing.
 
 > 💡 Use `getPermissionSupportInfo()` or `isPermissionFeatureSupported()` to programmatically check support for specific permissions.
 

@@ -1,3 +1,7 @@
+import { PermissionType } from "../enums/permission-type.enum";
+import type { PermissionRequestResult } from "../types/permission-request";
+import { observeStatus } from "./observe-status";
+
 export interface ModalStyleOptions {
   modalBackgroundColor?: string;
   modalTextColor?: string;
@@ -187,15 +191,25 @@ export function showInfoModal(
 /**
  * Shows the permission request modal, then runs `requestFn` if the user continues.
  * Guarantees overlay cleanup on every path (reject, timeout, allow, request errors).
+ * Dismissals and unexpected throws are classified via observed permission status.
  */
 export function withPermissionModal(
-  permissionName: string,
-  requestFn: () => Promise<boolean>,
+  permissionName: PermissionType,
+  requestFn: () => Promise<PermissionRequestResult>,
   styleOptions: ModalStyleOptions = {}
-): Promise<boolean> {
+): Promise<PermissionRequestResult> {
+  const asDismissed = async (): Promise<PermissionRequestResult> => {
+    const status = await observeStatus(permissionName);
+    return { granted: false, status, reason: "dismissed" };
+  };
+
+  const asError = async (error: unknown): Promise<PermissionRequestResult> => {
+    const status = await observeStatus(permissionName);
+    return { granted: false, status, reason: "error", error };
+  };
+
   if (typeof document === "undefined" || !document.body) {
-    // Non-DOM environments: run the request directly
-    return requestFn().catch(() => false);
+    return requestFn().catch((error) => asError(error));
   }
 
   return new Promise((resolve) => {
@@ -247,16 +261,27 @@ export function withPermissionModal(
       document.removeEventListener("keydown", onKeyDown);
     };
 
-    const settle = (value: boolean) => {
+    const settle = (result: PermissionRequestResult) => {
       if (settled) return;
       settled = true;
       cleanup();
-      resolve(value);
+      resolve(result);
+    };
+
+    const dismiss = () => {
+      if (settled) return;
+      allowButton.disabled = true;
+      rejectButton.disabled = true;
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      void asDismissed().then(settle);
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        settle(false);
+        dismiss();
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -265,20 +290,18 @@ export function withPermissionModal(
       countdown--;
       rejectButton.textContent = `Reject (${countdown}s)`;
       if (countdown <= 0) {
-        settle(false);
+        dismiss();
       }
     }, 1000);
 
     allowButton.onclick = async () => {
       if (settled) return;
-      // Disable buttons immediately to prevent double-clicks
       allowButton.disabled = true;
       rejectButton.disabled = true;
       if (intervalId !== null) {
         clearInterval(intervalId);
         intervalId = null;
       }
-      // Remove modal before native prompt so they don't stack
       if (overlay.isConnected) {
         overlay.remove();
       }
@@ -288,16 +311,12 @@ export function withPermissionModal(
         const result = await requestFn();
         settle(result);
       } catch (error) {
-        console.error(
-          `[browser-permissions-helper] Error while requesting "${permissionName}":`,
-          error
-        );
-        settle(false);
+        settle(await asError(error));
       }
     };
 
     rejectButton.onclick = () => {
-      settle(false);
+      dismiss();
     };
   });
 }
